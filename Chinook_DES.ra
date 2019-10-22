@@ -1,0 +1,24 @@
+% Team TDS
+% Authors: THOMAS NGO, DANH PHAM, SU HTET
+
+/multiline on
+/abolish
+/show_compilations on
+/restore_ddb Chinook_DES.ddb
+/ra
+% Albums by the artist Red Hot Chili Peppers
+project Album.Title (select Artist.Name = 'Red Hot Chili Peppers' (Artist zjoin Artist.ArtistId=Album.ArtistId Album));
+
+% Genres associated with the artist U2
+res1 := project AlbumId (select Artist.Name='U2'(Artist njoin Album));
+project Name (Genre njoin (project GenreId (Track njoin res1)));
+
+% Names of tracks on playlist Grunge and their associated artists and albums.
+project TrackName, Artist.Name, Album.Title (project TrackName, Album.Title, Album.ArtistId(project Track.Name AS TrackName, Track.AlbumId (project TrackId ((project PlaylistId (select Name='Grunge'(Playlist))) njoin PlaylistTrack) njoin Track) njoin Album) njoin Artist);
+% Names and email addresses of customers who bought tracks in playlist TV Shows
+project FirstName, LastName, Email ((project CustomerId ((project InvoiceId ((project TrackId ((project PlaylistId (select Name='TV Shows' (Playlist))) njoin PlaylistTrack)) njoin InvoiceLine)) njoin Invoice)) njoin Customer);
+
+% Names of the support representatives whose customers bought tracks in Purchased AAC audio file format.
+project LastName, FirstName ((project SupportRepId AS EmployeeId ((project CustomerId ((project InvoiceId ((project TrackId (project MediaTypeId (select Name='Purchased AAC audio file' (MediaType)) njoin Track)) njoin InvoiceLine)) njoin Invoice)) njoin Customer)) njoin Employee);
+/datalog
+/mulitine off
