@@ -1,0 +1,32 @@
+% Team TDS
+% Author: Thomas Ngo , Danh Pham, Su Htet 
+
+
+
+
+/abolish
+/show_compilations on
+/restore_ddb Chinook_DES.ddb
+/datalog
+
+
+
+ans_1:= { A2|  (exists E2 ,A1,E1,A3) 'Album'(A1,A2,A3) and 'Artist'(E1,E2) and E2 = 'Red Hot Chili Peppers' and E1 = A3 };
+
+ans_2:= { GNAME | exists GID  'Genre'(GID,GNAME)  and exists T1,T3,T5 'Track'(T1,_,T3,_,T5,_,_,_,_) and T5 = GID and  exists A1,A3  'Album'(A1,_,A3) and A1=T3 and exists R1,R2  'Artist'(R1,R2)  and R2 ='U2' and R1=A3 };
+
+ans_3:= { T2,R2, AL2 | exists T1,AL1,AL3,R1,T3  'Track'(T1,T2,T3,_,_,_,_,_,_) and  'Album'(AL1,AL2,AL3) and 'Artist'(R1,R2) and  exists PL1,PL2,PLT1,PLT2 'Playlist' (PL1,PL2) and PL2 ='Grunge' and 'PlaylistTrack'(PLT1,PLT2) and PL1 = PLT1  and T1= PLT2 and T3 = AL1 and AL3 = R1     };  
+
+ans_4:= { C2,C3,C12 | (exists C1)  'Customer'(C1,C2,C3,_,_,_,_,_,_,_,_,C12,_) and (exists IV1,IV2, IVL1,IVL2,IVL3,T,PLT1,PLT2,PL1,PL2) 'Invoice'(IV1,IV2,_,_,_,_,_,_,_) and C1 = IV2 and 'InvoiceLine'(IVL1,IVL2,IVL3,_,_) and IV1 = IVL2 and 'Track'(T,_,_,_,_,_,_,_,_) and T= IVL3 and 'PlaylistTrack'(PLT1,PLT2) and T = PLT2 and 'Playlist'(PL1,PL2) and PL2 = 'TV Shows' and PL1 = PLT1 };
+
+ans_5:= { E2,E3 | exists E1 'Employee'(E1,E2,E3,_,_,_,_,_,_,_,_,_,_,_,_) and (exists C1,C13, IV1,IV2, IVL1,IVL2,IVL3,T1,T4,M1,M2)('Customer'(C1,_,_,_,_,_,_,_,_,_,_,_,C13) and E1 = C13 and 'Invoice'(IV1,IV2,_,_,_,_,_,_,_)  and C1 = IV2 and 'InvoiceLine'(IVL1,IVL2,IVL3,_,_) and IV1 = IVL2 and 'Track'(T1,_,_,T4,_,_,_,_,_) and T1 = IVL3 and 'MediaType'(M1,M2) and M2 = 'Purchased AAC audio file' and M1 = T4 )}; 
+
+
+% Sql result statement:
+
+Select * from ans_1; 
+Select * from ans_2; 
+Select * from ans_3; 
+Select * from ans_4; 
+Select * from ans_5; 
+
