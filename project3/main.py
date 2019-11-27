@@ -67,7 +67,7 @@ def create_db(file_name):
         num_blocks = math.floor(10**7/10)
     print(num_blocks)
     with open(file_name, 'rb') as f:
-        for i in range(1, num_blocks):
+        for i in range(1, num_blocks+1):
             data = f.read(4096)
             with dbm.open('test', 'c') as db:
                 db[str(i)] = data
