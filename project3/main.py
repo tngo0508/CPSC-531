@@ -1,101 +1,57 @@
-import dbm
 from struct import unpack
 from struct import pack
 from collections import namedtuple
 from datetime import date
-import os
-import math
+import dbm.dumb
+import sys
 
 
-# def create_db(filename):
-#     with open(filename, 'rb') as f:
-#         j = 0
-#         for i in range(1, 101):
-#             with dbm.open('test', 'c') as db:
-#                 data = f.read(405)
-#                 fname, _, _, _, _, _, _, _, _, ssn, _, _, _ = unpack(
-#                     '20s20s70s40s80s25sIII12s25s50s50s', data)
-#                 print(fname)
-#                 db[str(i)] = data
-#                 j += 1
-#                 if j == 10:
-#                     j = 0
-#                     f.read(46)
-
-# def table_scan():
-#     Person = namedtuple(
-#         'Person', 'fname, lname, ssn, day, month, year')
-#     with dbm.open('test', 'r') as db:
-#         for record in db:
-#             data = db.get(record)
-#             if len(data) == 405:
-#                 fname, lname, job, comp, addr, phone, day, month, year, ssn, uname, email, url = unpack(
-#                     '20s20s70s40s80s25sIII12s25s50s50s', data)
-#                 if calculate_age(day, month, year) < 21:
-#                     fname = fname.replace(b'\x00', b'')
-#                     lname = lname.replace(b'\x00', b'')
-#                     job = job.replace(b'\x00', b'')
-#                     comp = comp.replace(b'\x00', b'')
-#                     addr = addr.replace(b'\x00', b'')
-#                     phone = phone.replace(b'\x00', b'')
-#                     ssn = ssn.replace(b'\x00', b'')
-#                     uname = uname.replace(b'\x00', b'')
-#                     email = email.replace(b'\x00', b'')
-#                     url = url.replace(b'\x00', b'')
-#                     print(Person(fname, lname, ssn, day, month, year))
-
-# small.bin
-# r = 100 records
-# block size B = 4096 bytes
-# record length R = 405 bytes
-# bfr = B/r = 4096/405 = 10 
-# number of blocks = r/bfr = 100/10 = 10 blocks
-
-
-# large.bin
-# r = 10 million
-# block size B = 4096 bytes
-# record length R = 405 bytes
-# bfr = B/R = 4096/405 = 10
-# number of blocks = r/bfr = 10 million / 10 = 1 million blocks
-
-def create_db(file_name):
+def create_index(file_name):
     num_blocks = 0
     if file_name == 'small.bin':
-        num_blocks = math.floor(100/10)
+        num_blocks = 10
     elif file_name == 'large.bin':
-        num_blocks = math.floor(10**7/10)
-    print(num_blocks)
-    with open(file_name, 'rb') as f:
-        for i in range(1, num_blocks+1):
-            data = f.read(4096)
-            with dbm.open('test', 'c') as db:
-                db[str(i)] = data
+        num_blocks = 1048576
+    else:
+        raise ValueError('file_name has to be either small.bin or larger.bin')
+    with dbm.dumb.open('test', 'n') as db:
+        offset = 0
+        for i in range(1, num_blocks + 1):
+            db[str(i)] = str(offset)
+            offset += 4096
 
 
-def table_scan():
+def table_scan(file_name):
     Person = namedtuple(
-        'Person', 'fname, lname, ssn, day, month, year')
-    with dbm.open('test', 'r') as db:
-        for record in db:
-            data = db.get(record)
-            start = 0
-            for _ in range(10):
-                fname, lname, job, comp, addr, phone, day, month, year, ssn, uname, email, url = unpack(
+        'Person', 'fname, lname, ssn, age')
+    with dbm.dumb.open('test', 'r') as db:
+        with open(file_name, 'rb') as f:
+            count = 0
+            for record in db:
+                offset = int(db.get(record))
+                f.seek(offset)
+                data = f.read(4096)
+
+                start = 0
+                for _ in range(10):
+                    fname, lname, job, comp, addr, phone, day, month, year, ssn, uname, email, url = unpack(
                     '20s20s70s40s80s25sIII12s25s50s50s', data[start:start+405])
-                if calculate_age(day, month, year) < 21:
-                    fname = fname.replace(b'\x00', b'')
-                    lname = lname.replace(b'\x00', b'')
-                    job = job.replace(b'\x00', b'')
-                    comp = comp.replace(b'\x00', b'')
-                    addr = addr.replace(b'\x00', b'')
-                    phone = phone.replace(b'\x00', b'')
-                    ssn = ssn.replace(b'\x00', b'')
-                    uname = uname.replace(b'\x00', b'')
-                    email = email.replace(b'\x00', b'')
-                    url = url.replace(b'\x00', b'')
-                    print(Person(fname, lname, ssn, day, month, year))
-                start += 405
+                    age = calculate_age(day, month, year)
+                    if  age < 21:
+                        count += 1
+                        fname = fname.replace(b'\x00', b'')
+                        lname = lname.replace(b'\x00', b'')
+                        job = job.replace(b'\x00', b'')
+                        comp = comp.replace(b'\x00', b'')
+                        addr = addr.replace(b'\x00', b'')
+                        phone = phone.replace(b'\x00', b'')
+                        ssn = ssn.replace(b'\x00', b'')
+                        uname = uname.replace(b'\x00', b'')
+                        email = email.replace(b'\x00', b'')
+                        url = url.replace(b'\x00', b'')
+                        # print(Person(fname, lname, ssn, age))
+                    start += 405
+            print(count)
 
 
 def calculate_age(day, month, year):
@@ -104,24 +60,33 @@ def calculate_age(day, month, year):
     return today.year - year - ((today.month, today.day) < (month, day))
 
 
-def uniqueness_check():
-    res = []
+def uniqueness_check(file_name):
+    res = set()
     seen = set()
-    with dbm.open('test', 'r') as db:
-        for record in db:
-            data = db.get(record)
-            if len(data) == 405:
-                _, _, _, _, _, _, _, _, _, ssn, _, _, _ = unpack(
-                    '20s20s70s40s80s25sIII12s25s50s50s', data)
-                ssn = ssn.replace(b'\x00', b'')
-                if ssn not in seen:
-                    seen.add(ssn)
-                else:
-                    res.append(ssn)
-    return res
+    with dbm.dumb.open('test', 'r') as db:
+        with open(file_name, 'rb') as f:
+            for record in db:
+                offset = int(db.get(record))
+                f.seek(offset)
+                data = f.read(4096)
+
+                start = 0
+                for _ in range(10):
+                    fname, _, _, _, _, _, _, _, _, ssn, _, _, _ = unpack(
+                        '20s20s70s40s80s25sIII12s25s50s50s', data[start:start+405])
+                    ssn = ssn.replace(b'\x00', b'')
+                    if ssn not in seen:
+                        seen.add(ssn)
+                    else:
+                        res.add(ssn)
+                    start += 405
+    return res if res else None
 
 
-create_db('small.bin')
-table_scan()
-# print(get_len('large.bin'))
-# print(uniqueness_check())
+def create_secondary_index(file_name):
+    pass
+
+
+# create_index(sys.argv[1])
+table_scan(sys.argv[1])
+# print(uniqueness_check(sys.argv[1]))
