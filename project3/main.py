@@ -1,8 +1,8 @@
-from struct import unpack
-from struct import pack
+from struct import unpack, pack, calcsize
+# from struct import pack
 from collections import namedtuple
 from datetime import date
-import dbm.dumb
+import dbm.ndbm
 import sys
 
 
@@ -14,7 +14,7 @@ def create_primary_index(file_name):
         num_blocks = 1048576
     else:
         raise ValueError('file_name has to be either small.bin or larger.bin')
-    with dbm.dumb.open('index', 'n') as db:
+    with dbm.ndbm.open('index', 'n') as db:
         offset = 0
         for i in range(1, num_blocks + 1):
             db[str(i)] = str(offset)
@@ -24,9 +24,10 @@ def create_primary_index(file_name):
 def table_scan(file_name):
     Person = namedtuple(
         'Person', 'fname, lname, ssn, age')
-    with dbm.dumb.open('index', 'r') as db:
+    count = 0
+    with dbm.ndbm.open('index', 'r') as db:
         with open(file_name, 'rb') as f:
-            for record in db:
+            for record in db.keys():
                 offset = int(db.get(record))
                 f.seek(offset)
                 data = f.read(4096)
@@ -48,7 +49,9 @@ def table_scan(file_name):
                         email = email.replace(b'\x00', b'')
                         url = url.replace(b'\x00', b'')
                         # print(Person(fname, lname, ssn, age))
+                        count += 1
                     start += 405
+    print(count)
 
 
 def calculate_age(day, month, year):
@@ -61,7 +64,7 @@ def calculate_age(day, month, year):
 def uniqueness_check(file_name):
     res = set()
     seen = set()
-    with dbm.dumb.open('index', 'r') as db:
+    with dbm.ndbm.open('index', 'r') as db:
         with open(file_name, 'rb') as f:
             for record in db:
                 offset = int(db.get(record))
@@ -89,39 +92,29 @@ def create_secondary_index(file_name):
         num_blocks = 1048576
     else:
         raise ValueError('file_name has to be either small.bin or larger.bin')
-    with dbm.dumb.open('secondaryIndex', 'n') as secondaryIndex:
+    with dbm.ndbm.open('secondaryIndex', 'n') as secondaryIndex:
         with open(file_name, 'rb') as f:
             record_pointer = 0
             # block_anchor = 0
             for _ in range(num_blocks):
                 record_pointer = f.tell()
+                # record_pointer = block_anchor
                 data = f.read(4096)
 
                 start = 0
-                # record_pointer = block_anchor
                 for _ in range(10):
-                    fname, lname, job, comp, addr, phone, day, month, year, ssn, uname, email, url = unpack(
+                    _, _, _, _, _, _, day, month, year, _, _, _, _ = unpack(
                     '20s20s70s40s80s25sIII12s25s50s50s', data[start:start+405])
-                    age = calculate_age(day, month, year)
-                    fname = fname.replace(b'\x00', b'')
-                    lname = lname.replace(b'\x00', b'')
-                    job = job.replace(b'\x00', b'')
-                    comp = comp.replace(b'\x00', b'')
-                    addr = addr.replace(b'\x00', b'')
-                    phone = phone.replace(b'\x00', b'')
-                    ssn = ssn.replace(b'\x00', b'')
-                    uname = uname.replace(b'\x00', b'')
-                    email = email.replace(b'\x00', b'')
-                    url = url.replace(b'\x00', b'')
 
-                    birthdate = pack('III', day, month, year)
+                    birthdate = pack('hhh', day, month, year)
 
                     if birthdate not in secondaryIndex:
-                        secondaryIndex[birthdate] = str(record_pointer)
+                        secondaryIndex[birthdate] = pack('I', record_pointer)
                     else:
-                        new_record_pointer = str(secondaryIndex[birthdate].decode('utf-8')) + ',' + str(record_pointer)
+                        new_record_pointer = secondaryIndex[birthdate] + b'*|*' + pack('I', record_pointer)
                         secondaryIndex[birthdate] = new_record_pointer
-                        # print(new_record_pointer)
+                        print([unpack('I', x)[0] for x in secondaryIndex[birthdate].split(b'*|*')])
+                    # print(secondaryIndex[birthdate])
                     start += 405
                     record_pointer += 405
                 # block_anchor += 4096
@@ -130,30 +123,26 @@ def create_secondary_index(file_name):
 def table_scan_on_secondary_index(file_name):
     Person = namedtuple(
         'Person', 'fname, lname, ssn, age')
-    with dbm.dumb.open('secondaryIndex', 'r') as secondaryIndex:
+    count = 0
+    with dbm.ndbm.open('secondaryIndex', 'r') as secondaryIndex:
         with open(file_name, 'rb') as f:
-            for birthdate in secondaryIndex:
-                day, month, year = unpack('III', birthdate)
+            for birthdate in secondaryIndex.keys():
+                day, month, year = unpack('hhh', birthdate)
                 age = calculate_age(day, month, year)
                 if age < 21:
-                    record_pointers = secondaryIndex[birthdate].decode('utf-8').split(',')
+                    record_pointers = [unpack('I', x)[0] for x in secondaryIndex[birthdate].split(b'//')]
                     # print(record_pointers)
                     for record_pointer in record_pointers:
-                        f.seek(int(record_pointer))
+                        f.seek(record_pointer)
                         data = f.read(405)
-                        fname, lname, job, comp, addr, phone, day, month, year, ssn, uname, email, url = unpack(
+                        fname, lname, _, _, _, _, _, _, _, ssn, _, _, _ = unpack(
                         '20s20s70s40s80s25sIII12s25s50s50s', data)
                         fname = fname.replace(b'\x00', b'')
                         lname = lname.replace(b'\x00', b'')
-                        job = job.replace(b'\x00', b'')
-                        comp = comp.replace(b'\x00', b'')
-                        addr = addr.replace(b'\x00', b'')
-                        phone = phone.replace(b'\x00', b'')
                         ssn = ssn.replace(b'\x00', b'')
-                        uname = uname.replace(b'\x00', b'')
-                        email = email.replace(b'\x00', b'')
-                        url = url.replace(b'\x00', b'')
-                        print(Person(fname, lname, ssn, age))
+                        count += 1
+                        # print(Person(fname, lname, ssn, age))
+    print(count)
 
 
 def test(file_name):
