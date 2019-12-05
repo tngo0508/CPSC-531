@@ -17,7 +17,7 @@ def create_primary_index(file_name):
     with dbm.ndbm.open('index', 'n') as db:
         offset = 0
         for i in range(1, num_blocks + 1):
-            db[str(i)] = str(offset)
+            db[pack('I', i)] = pack('I', offset)
             offset += 4096
 
 # query 1
@@ -28,26 +28,19 @@ def table_scan(file_name):
     with dbm.ndbm.open('index', 'r') as db:
         with open(file_name, 'rb') as f:
             for record in db.keys():
-                offset = int(db.get(record))
+                offset = unpack('I', db[record])[0]
                 f.seek(offset)
                 data = f.read(4096)
 
                 start = 0
                 for _ in range(10):
                     fname, lname, job, comp, addr, phone, day, month, year, ssn, uname, email, url = unpack(
-                    '20s20s70s40s80s25sIII12s25s50s50s', data[start:start+405])
+                    '20s20s70s40s80s25s3I12s25s50s50s', data[start:start+405])
                     age = calculate_age(day, month, year)
                     if  age < 21:
                         fname = fname.replace(b'\x00', b'')
                         lname = lname.replace(b'\x00', b'')
-                        job = job.replace(b'\x00', b'')
-                        comp = comp.replace(b'\x00', b'')
-                        addr = addr.replace(b'\x00', b'')
-                        phone = phone.replace(b'\x00', b'')
                         ssn = ssn.replace(b'\x00', b'')
-                        uname = uname.replace(b'\x00', b'')
-                        email = email.replace(b'\x00', b'')
-                        url = url.replace(b'\x00', b'')
                         # print(Person(fname, lname, ssn, age))
                         count += 1
                     start += 405
@@ -66,8 +59,8 @@ def uniqueness_check(file_name):
     seen = set()
     with dbm.ndbm.open('index', 'r') as db:
         with open(file_name, 'rb') as f:
-            for record in db:
-                offset = int(db.get(record))
+            for record in db.keys():
+                offset = unpack('I', db[record])[0]
                 f.seek(offset)
                 data = f.read(4096)
 
@@ -79,9 +72,10 @@ def uniqueness_check(file_name):
                     if ssn not in seen:
                         seen.add(ssn)
                     else:
+                        # print(ssn)
                         res.add(ssn)
                     start += 405
-    return res if res else None
+    return len(res) if res else None
 
 
 def create_secondary_index(file_name):
@@ -104,17 +98,16 @@ def create_secondary_index(file_name):
                 start = 0
                 for _ in range(10):
                     _, _, _, _, _, _, day, month, year, _, _, _, _ = unpack(
-                    '20s20s70s40s80s25sIII12s25s50s50s', data[start:start+405])
+                    '20s20s70s40s80s25s3I12s25s50s50s', data[start:start+405])
 
-                    birthdate = pack('hhh', day, month, year)
+                    birthdate = pack('3h', day, month, year)
 
                     if birthdate not in secondaryIndex:
                         secondaryIndex[birthdate] = pack('I', record_pointer)
                     else:
-                        new_record_pointer = secondaryIndex[birthdate] + b'*|*' + pack('I', record_pointer)
+                        new_record_pointer = secondaryIndex[birthdate] + pack('I', record_pointer)
+                        # print([unpack('I', x)[0] for x in secondaryIndex[birthdate].split(unpack('x', ))])
                         secondaryIndex[birthdate] = new_record_pointer
-                        print([unpack('I', x)[0] for x in secondaryIndex[birthdate].split(b'*|*')])
-                    # print(secondaryIndex[birthdate])
                     start += 405
                     record_pointer += 405
                 # block_anchor += 4096
@@ -127,11 +120,12 @@ def table_scan_on_secondary_index(file_name):
     with dbm.ndbm.open('secondaryIndex', 'r') as secondaryIndex:
         with open(file_name, 'rb') as f:
             for birthdate in secondaryIndex.keys():
-                day, month, year = unpack('hhh', birthdate)
+                day, month, year = unpack('3h', birthdate)
                 age = calculate_age(day, month, year)
                 if age < 21:
-                    record_pointers = [unpack('I', x)[0] for x in secondaryIndex[birthdate].split(b'//')]
-                    # print(record_pointers)
+                    num_record_pointers = len(secondaryIndex[birthdate]) // 4
+                    format_char = str(num_record_pointers) + 'I'
+                    record_pointers = unpack(format_char, secondaryIndex[birthdate])
                     for record_pointer in record_pointers:
                         f.seek(record_pointer)
                         data = f.read(405)
@@ -141,7 +135,7 @@ def table_scan_on_secondary_index(file_name):
                         lname = lname.replace(b'\x00', b'')
                         ssn = ssn.replace(b'\x00', b'')
                         count += 1
-                        # print(Person(fname, lname, ssn, age))
+                    # print(Person(fname, lname, ssn, age))
     print(count)
 
 
@@ -164,7 +158,7 @@ def test(file_name):
 if __name__ == '__main__':
     file_name = sys.argv[1]
     # create_primary_index(file_name)
-    create_secondary_index(file_name)
+    # create_secondary_index(file_name)
     # table_scan(file_name)
     # table_scan_on_secondary_index(file_name)
     # print(uniqueness_check(file_name))
