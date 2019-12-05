@@ -1,7 +1,5 @@
-
 import struct
 import shelve
-
 from datetime import date
  #first_name VARCHAR(20) NOT NULL,
   #  last_name VARCHAR(20) NOT NULL,
@@ -37,55 +35,51 @@ def calculate_age(day, month, year):
 
 
 def makeIndex():
- with shelve.open('secondarydb', 'c') as secondary:
+ with shelve.open('primaryIndex', 'c') as primary:
   with open('large.bin','rb') as f:
    blockpointer = 0 
-   for _int in range(1048576):
+   for i in range(1048576):
     blockpointer = f.tell()
-    start = 0 
-    end = 405
     datafiles= f.read(4096)
+    records_perblock = []
     for _int in range(10):
-     a = emp._make(struct.unpack('20s20s70s40s80s25sIII12s25s50s50s', datafiles[start:end]))
-     birthday = str(a.dd)+'/'+ str(a.mm) +'/'+ str(a.yyyy)
-     if birthday in secondary:
-      temp = secondary[birthday] 
-      temp.append(blockpointer)
-      secondary[birthday] = temp
-     else:
-      new = []
-      new.append(blockpointer)
-      secondary[birthday] = new
-      new.clear()
-     start+= 405
-     end = start+ 405
+     records_perblock.append(blockpointer)
      blockpointer +=405
-    
-
-
-def query_secondaryindex():
- secondary_list = []
- with shelve.open('secondarydb', 'r') as indexdb:
-  for k in indexdb.keys():
-   age = k.split('/')
-   if calculate_age(int(age[0]),int(age[1]),int(age[2])) < 21:
-    locations = indexdb.get(k)
-    for loca in locations:
-     secondary_list.append(loca)
-
- print(len(secondary_list))
- with open('large.bin','rb') as f :
-  for location in secondary_list:
-   f.seek(int(location))
-   datas = f.read(405)
-   a = emp._make(struct.unpack('20s20s70s40s80s25sIII12s25s50s50s', datas))
+    primary[str(i)] = records_perblock
+      
+def query1():
+ counter = 0 
+ with shelve.open('primaryIndex', 'r') as primary:
+  with open('large.bin','rb') as f:
+   for k in primary.keys():
+    records_pionter = primary.get(k)
+    for record in records_pionter:
+     f.seek(int(record))
+     datas = f.read(405)
+     a = emp._make(struct.unpack('20s20s70s40s80s25sIII12s25s50s50s', datas))
+     if calculate_age(a.dd,a.mm,a.yyyy) < 21:
+      counter +=1
+      #print(removeNULL(a))
+ print(counter)
    
-   #print(removeNULL(a))
-   
+def unique_check():
+ unique = []
+ check = []
+ with shelve.open('primaryIndex', 'r') as primary:
+  with open('large.bin','rb') as f:
+   for k in primary.keys():
+    records_pionter = primary.get(k)
+    for record in records_pionter:
+     f.seek(int(record))
+     datas = f.read(405)
+     a = emp._make(struct.unpack('20s20s70s40s80s25sIII12s25s50s50s', datas))
+     if a.ssn not in check:
+      check.append(a.ssn)
+     else:
+      unique.append(a.ssn)
+ return unique
 
 
-makeIndex()
-
-query_secondaryindex()
-
-
+#makeIndex()
+query1()
+print(unique_check())
