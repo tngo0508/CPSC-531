@@ -62,3 +62,4 @@ else
   tail -3 "$DATE"_"$FILE_NAME"_"$OUT".log | tee "$DATE"_"$FILE_NAME"_"$OUT"_time.log
   exit 1
 fi
+
