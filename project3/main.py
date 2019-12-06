@@ -22,7 +22,8 @@ def create_primary_index(file_name):
             offset += 4096
 
 # query 1
-def table_scan(file_name):
+def table_scan(file_name, verbose):
+    count = 0
     Person = namedtuple(
         'Person', 'fname, lname, ssn, age')
     with dbm.ndbm.open('index', 'r') as db:
@@ -41,8 +42,11 @@ def table_scan(file_name):
                         fname = fname.replace(b'\x00', b'')
                         lname = lname.replace(b'\x00', b'')
                         ssn = ssn.replace(b'\x00', b'')
-                        print(Person(fname, lname, ssn, age))
+                        if verbose:
+                            print(Person(fname, lname, ssn, age))
+                        count += 1
                     start += 405
+    print("Number of records: {}".format(count))
 
 
 def calculate_age(day, month, year):
@@ -52,7 +56,8 @@ def calculate_age(day, month, year):
 
 
 # query 2
-def uniqueness_check(file_name):
+def uniqueness_check(file_name, verbose):
+    count = 0
     seen = set()
     with dbm.ndbm.open('index', 'r') as db:
         with open(file_name, 'rb') as f:
@@ -69,8 +74,11 @@ def uniqueness_check(file_name):
                     if ssn not in seen:
                         seen.add(ssn)
                     else:
-                        print(ssn)
+                        count += 1
+                        if verbose:
+                            print(ssn)
                     start += 405
+    print("Number of records: {}".format(count))
 
 
 def create_secondary_index(file_name):
@@ -104,7 +112,8 @@ def create_secondary_index(file_name):
                     record_pointer += 405
 
 
-def table_scan_on_secondary_index(file_name):
+def table_scan_on_secondary_index(file_name, verbose):
+    count = 0
     Person = namedtuple(
         'Person', 'fname, lname, ssn, age')
     with dbm.ndbm.open('secondaryIndex', 'r') as secondaryIndex:
@@ -124,7 +133,10 @@ def table_scan_on_secondary_index(file_name):
                         fname = fname.replace(b'\x00', b'')
                         lname = lname.replace(b'\x00', b'')
                         ssn = ssn.replace(b'\x00', b'')
-                    print(Person(fname, lname, ssn, age))
+                        count += 1
+                        if verbose:
+                            print(Person(fname, lname, ssn, age))
+    print("Number of records: {}".format(count))
 
 
 def main(args):
@@ -133,16 +145,17 @@ def main(args):
     if args.secondary:
         create_secondary_index(args.file)
     if args.query1:
-        table_scan(args.file)
+        table_scan(args.file, args.verbose)
     if args.query2:
-        uniqueness_check(args.file)
+        uniqueness_check(args.file, args.verbose)
     if args.query3:
-        table_scan_on_secondary_index(args.file)
+        table_scan_on_secondary_index(args.file, args.verbose)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Fall 2019 - Advanced Database Project 3')
     parser.add_argument('file', help='binary file (small.bin or large.bin)')
+    parser.add_argument('-v', '--verbose', help='Show output records', action='store_true')
 
     group = parser.add_mutually_exclusive_group()
     group.add_argument('-p', '--primary', help='Create auto increment index', action='store_true')
@@ -152,7 +165,7 @@ if __name__ == '__main__':
     group.add_argument('-q3', '--query3', help='Secondary index', action='store_true')
 
     args = parser.parse_args()
-    if not any([args.primary, args.secondary, args.query1, args.query2, args.query3]):
+    if not any([args.primary, args.secondary, args.query1, args.query2, args.query3, args.verbose]):
         parser.print_help()
         print('\nOne of the options is required')
         sys.exit(0)
