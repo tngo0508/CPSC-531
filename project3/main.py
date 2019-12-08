@@ -2,6 +2,7 @@
 from struct import unpack, pack, calcsize
 from collections import namedtuple
 from datetime import date
+from datetime import datetime
 import dbm.ndbm
 import sys
 import os
@@ -18,6 +19,8 @@ def create_primary_index(file_name):
             offset += 4096
 
 # query 1
+
+
 def table_scan(file_name, verbose):
     count = 0
     Person = namedtuple(
@@ -149,7 +152,6 @@ def generate_secondary_index_file(file_name):
 
                     index_entry = pack('4I', day, month, year, record_pointer)
                     secondary_index_file.write(index_entry)
-
                     start += 405
                     record_pointer += 405
 
@@ -157,6 +159,7 @@ def generate_secondary_index_file(file_name):
 def create_secondary_index2(file_name):
     file_size = os.stat(file_name).st_size
     num_blocks = file_size // 4096
+    num_blocks = 1 if num_blocks == 0 else num_blocks
     with dbm.ndbm.open('secondaryIndex', 'n') as secondaryIndex:
         with open(file_name, 'rb') as f:
             record_pointer = 0
@@ -166,10 +169,14 @@ def create_secondary_index2(file_name):
 
                 start = 0
                 for _ in range(256):
+                    entry = data[start:start+16]
+                    if not entry:
+                        break
+                    
                     day, month, year, record_pointer = unpack(
-                        '4I', data[start:start+16])
-                    birthdate = pack('3I', day, month, year)
+                        '4I', entry)
 
+                    birthdate = pack('3I', day, month, year)
                     if birthdate not in secondaryIndex:
                         secondaryIndex[birthdate] = pack('I', record_pointer)
                     else:
@@ -208,14 +215,41 @@ def table_scan_on_secondary_index2(file_name, verbose):
     print("Number of records: {}".format(count))
 
 
+# def create_cluster_index(file_name):
+#     file_size = os.stat(file_name).st_size
+#     num_blocks = file_size // 4096
+#     lst = []
+#     with open('cluster_index_file.bin', 'wb') as secondary_index_file:
+#         with open(file_name, 'rb') as f:
+#             record_pointer = 0
+#             for _ in range(num_blocks):
+#                 record_pointer = f.tell()
+#                 data = f.read(4096)
+
+#                 start = 0
+#                 for _ in range(256):
+#                     day, month, year, record_pointer = unpack(
+#                         '4I', data[start:start+16])
+#                     birthdate = '{}-{}-{}'.format(day, month, year)
+#                     birthdate_in_bytes = pack('3I', day, month, year)
+#                     lst.append((datetime.strptime(birthdate, '%d-%m-%Y').date(),
+#                                 birthdate_in_bytes, record_pointer))
+#                     # print(lst)
+
+#                     start += 16
+#                     record_pointer += 16
+#     lst.sort(key=lambda x: x[0])
+#     print(lst)
+
+
 def main(ARGS):
     if ARGS.primary:
         create_primary_index(ARGS.file)
     if ARGS.secondary:
         generate_secondary_index_file(ARGS.file)
         create_secondary_index2('secondary_index_file.bin')
-    if ARGS.cluster:
-        pass
+    # if ARGS.cluster:
+        # create_cluster_index('secondary_index_file.bin')
     if ARGS.query1:
         table_scan(ARGS.file, ARGS.verbose)
     if ARGS.query2:

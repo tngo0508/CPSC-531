@@ -3,3 +3,5 @@ project3/small.bin
 project3/index.db
 project3/secondary_index_file.bin
 project3/secondaryIndex.db
+project3/*.db
+project3/*.bin
