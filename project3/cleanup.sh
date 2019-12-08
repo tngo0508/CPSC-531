@@ -1,3 +1,3 @@
 #!/usr/bin/env sh
 
-rm *.log
+rm -f *.log

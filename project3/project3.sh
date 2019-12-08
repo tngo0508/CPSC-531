@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 
 if [ $# -lt 2 ]; then
-  printf "missing file or command\n"
+  printf "missing file or command\\n"
   exit 0
 fi
 
@@ -11,17 +11,17 @@ VERBOSE=$3
 OUT=''
 
 if [ -z "$FILE_NAME" ]; then
-  printf "missing file (small.bin or large.bin)\n"
+  printf "missing file (small.bin or large.bin)\\n"
   exit 0
 fi
 
 if [ ! -f "$FILE_NAME" ]; then
-  printf "%s Not found\n" "$FILE_NAME"
+  printf "%s Not found\\n" "$FILE_NAME"
   exit 0
 fi
 
 if [ -z "$CMD" ]; then
-  printf "missing command\n"
+  printf "missing command\\n"
   python3 main.py -h
   exit 0
 fi
