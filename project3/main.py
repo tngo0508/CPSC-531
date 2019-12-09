@@ -74,32 +74,37 @@ def table_scan(data_file, verbose):
     count = 0
     Person = namedtuple(
         'Person', 'fname, lname, ssn, age')
-    with dbm.ndbm.open('index', 'r') as db:
-        with open(data_file, 'rb') as f:
-            for record in db.keys():
-                offset = unpack('I', db[record])[0]
-                f.seek(offset)
-                data = f.read(4096)
+    try:
+        with dbm.ndbm.open('index', 'r') as db:
+            with open(data_file, 'rb') as f:
+                for record in db.keys():
+                    offset = unpack('I', db[record])[0]
+                    f.seek(offset)
+                    data = f.read(4096)
 
-                start = 0
+                    start = 0
 
-                # The block factor (bfr) = 10. 1 block contains 10 records
-                for _ in range(10):
+                    # The block factor (bfr) = 10. 1 block contains 10 records
+                    for _ in range(10):
 
-                    # the record length R = 404 bytes.
-                    # 405 is used due to offset in Python when slicing
-                    fname, lname, _, _, _, _, day, month, year, ssn, _, _, _ = unpack(
-                        '20s20s70s40s80s25s3I12s25s50s50s', data[start:start+405])
+                        # the record length R = 404 bytes.
+                        # 405 is used due to offset in Python when slicing
+                        fname, lname, _, _, _, _, day, month, year, ssn, _, _, _ = unpack(
+                            '20s20s70s40s80s25s3I12s25s50s50s', data[start:start+405])
 
-                    age = calculate_age(day, month, year)
-                    if age < 21:
-                        fname = fname.replace(b'\x00', b'')
-                        lname = lname.replace(b'\x00', b'')
-                        ssn = ssn.replace(b'\x00', b'')
-                        if verbose:
-                            print(Person(fname, lname, ssn, age))
-                        count += 1
-                    start += 405
+                        age = calculate_age(day, month, year)
+                        if age < 21:
+                            fname = fname.replace(b'\x00', b'')
+                            lname = lname.replace(b'\x00', b'')
+                            ssn = ssn.replace(b'\x00', b'')
+                            if verbose:
+                                print(Person(fname, lname, ssn, age))
+                            count += 1
+                        start += 405
+    except dbm.error:
+        print('You have not created primary index yet')
+        print('Run -p or --primary before executing this command')
+        exit(0)
     print("Number of records: {}".format(count))
 
 
@@ -135,31 +140,36 @@ def uniqueness_check(data_file, verbose):
     """
     count = 0
     seen = set()
-    with dbm.ndbm.open('index', 'r') as db:
-        with open(data_file, 'rb') as f:
-            for record in db.keys():
-                offset = unpack('I', db[record])[0]
-                f.seek(offset)
-                data = f.read(4096)
+    try:
+        with dbm.ndbm.open('index', 'r') as db:
+            with open(data_file, 'rb') as f:
+                for record in db.keys():
+                    offset = unpack('I', db[record])[0]
+                    f.seek(offset)
+                    data = f.read(4096)
 
-                start = 0
+                    start = 0
 
-                # The block factor (bfr) = 10. 1 block contains 10 records
-                for _ in range(10):
+                    # The block factor (bfr) = 10. 1 block contains 10 records
+                    for _ in range(10):
 
-                    # the record length R = 404 bytes.
-                    # 405 is used due to offset in Python when slicing
-                    _, _, _, _, _, _, _, _, _, ssn, _, _, _ = unpack(
-                        '20s20s70s40s80s25sIII12s25s50s50s', data[start:start+405])
+                        # the record length R = 404 bytes.
+                        # 405 is used due to offset in Python when slicing
+                        _, _, _, _, _, _, _, _, _, ssn, _, _, _ = unpack(
+                            '20s20s70s40s80s25sIII12s25s50s50s', data[start:start+405])
 
-                    ssn = ssn.replace(b'\x00', b'')
-                    if ssn not in seen:
-                        seen.add(ssn)
-                    else:
-                        count += 1
-                        if verbose:
-                            print(ssn)
-                    start += 405
+                        ssn = ssn.replace(b'\x00', b'')
+                        if ssn not in seen:
+                            seen.add(ssn)
+                        else:
+                            count += 1
+                            if verbose:
+                                print(ssn)
+                        start += 405
+    except dbm.error:
+        print('You have not created primary index yet')
+        print('Run -p or --primary before executing this command')
+        exit(0)
     print("Number of records: {}".format(count))
 
 
@@ -280,30 +290,35 @@ def table_scan_on_secondary_index(data_file, verbose):
     count = 0
     Person = namedtuple(
         'Person', 'fname, lname, ssn, age')
-    with dbm.ndbm.open('secondary_index', 'r') as secondary_index:
-        with open(data_file, 'rb') as f:
-            for birthdate in secondary_index.keys():
-                day, month, year = unpack('3I', birthdate)
-                age = calculate_age(day, month, year)
-                if age < 21:
+    try:
+        with dbm.ndbm.open('secondary_index', 'r') as secondary_index:
+            with open(data_file, 'rb') as f:
+                for birthdate in secondary_index.keys():
+                    day, month, year = unpack('3I', birthdate)
+                    age = calculate_age(day, month, year)
+                    if age < 21:
 
-                    # Each record pointer is represented as 4 bytes 
-                    num_record_pointers = len(secondary_index[birthdate]) // 4
-                    format_char = str(num_record_pointers) + 'I'
-                    record_pointers = unpack(
-                        format_char, secondary_index[birthdate])
+                        # Each record pointer is represented as 4 bytes 
+                        num_record_pointers = len(secondary_index[birthdate]) // 4
+                        format_char = str(num_record_pointers) + 'I'
+                        record_pointers = unpack(
+                            format_char, secondary_index[birthdate])
 
-                    for record_pointer in record_pointers:
-                        f.seek(record_pointer)
-                        data = f.read(405)
-                        fname, lname, _, _, _, _, _, _, _, ssn, _, _, _ = unpack(
-                            '20s20s70s40s80s25sIII12s25s50s50s', data)
-                        fname = fname.replace(b'\x00', b'')
-                        lname = lname.replace(b'\x00', b'')
-                        ssn = ssn.replace(b'\x00', b'')
-                        count += 1
-                        if verbose:
-                            print(Person(fname, lname, ssn, age))
+                        for record_pointer in record_pointers:
+                            f.seek(record_pointer)
+                            data = f.read(405)
+                            fname, lname, _, _, _, _, _, _, _, ssn, _, _, _ = unpack(
+                                '20s20s70s40s80s25sIII12s25s50s50s', data)
+                            fname = fname.replace(b'\x00', b'')
+                            lname = lname.replace(b'\x00', b'')
+                            ssn = ssn.replace(b'\x00', b'')
+                            count += 1
+                            if verbose:
+                                print(Person(fname, lname, ssn, age))
+    except dbm.error:
+        print('You haven not created secondary index yet')
+        print('Run -s or --secondary before executing this command')
+        exit(0)
     print("Number of records: {}".format(count))
 
 
@@ -407,26 +422,31 @@ def table_scan_on_cluster_index(data_file, verbose):
         'Person', 'fname, lname, ssn, age')
     birthdates = []
     start_offsets = []
-    with dbm.ndbm.open('cluster_index', 'r') as cluster_index:
-        for birthdate_in_bytes in cluster_index.keys():
-            day, month, year = unpack('3I', birthdate_in_bytes)
-            age = calculate_age(day, month, year)
-            if age < 21:
-                birthdates.append(birthdate_in_bytes)
+    try:
+        with dbm.ndbm.open('cluster_index', 'r') as cluster_index:
+            for birthdate_in_bytes in cluster_index.keys():
+                day, month, year = unpack('3I', birthdate_in_bytes)
+                age = calculate_age(day, month, year)
+                if age < 21:
+                    birthdates.append(birthdate_in_bytes)
 
-        sorted_birthdates = []
-        for birthdate_in_bytes in birthdates:
-            day, month, year = unpack(
-                '3I', birthdate_in_bytes)
-            birthdate = '{}-{}-{}'.format(day, month, year)
-            birthdate_in_bytes = pack('3I', day, month, year)
-            sorted_birthdates.append((datetime.strptime(birthdate, '%d-%m-%Y').date(),
-                                      birthdate_in_bytes))
+            sorted_birthdates = []
+            for birthdate_in_bytes in birthdates:
+                day, month, year = unpack(
+                    '3I', birthdate_in_bytes)
+                birthdate = '{}-{}-{}'.format(day, month, year)
+                birthdate_in_bytes = pack('3I', day, month, year)
+                sorted_birthdates.append((datetime.strptime(birthdate, '%d-%m-%Y').date(),
+                                        birthdate_in_bytes))
 
-        sorted_birthdates.sort(key=lambda x: x[0], reverse=True)
+            sorted_birthdates.sort(key=lambda x: x[0], reverse=True)
 
-        start_offsets = [cluster_index[birthdate[1]]
-                         for birthdate in sorted_birthdates]
+            start_offsets = [cluster_index[birthdate[1]]
+                            for birthdate in sorted_birthdates]
+    except dbm.error:
+        print('You have not created clustering index yet')
+        print('Run -c or --cluster before executing this command')
+        exit(0)
 
     start_offset = unpack('I', start_offsets[0])[0]
     with open('cluster_index_file.bin', 'rb') as cluster_index_file:
@@ -522,6 +542,7 @@ def main(ARGS):
         table_scan_on_cluster_index(ARGS.file, ARGS.verbose)
 
     print('Done!')
+    exit(1)
 
 
 if __name__ == '__main__':
