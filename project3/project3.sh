@@ -38,6 +38,9 @@ case $CMD in
   '-s')
     OUT="secondary"
     ;;
+  '-c')
+    OUT="cluster"
+    ;;
   '-q1')
     OUT="query1"
     ;;
@@ -46,6 +49,9 @@ case $CMD in
     ;;
   '-q3')
     OUT="query3"
+    ;;
+  '-q4')
+    OUT="query4"
     ;;
 esac
 
