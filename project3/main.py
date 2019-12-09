@@ -243,15 +243,15 @@ def table_scan_on_cluster_index(file_name, verbose):
         sorted_birthdates.sort(key=lambda x: x[0], reverse=True)
 
         start_offsets = [cluster_index[birthdate[1]] for birthdate in sorted_birthdates]
-        # start_offsets = [unpack('I', cluster_index[birthdate[1]]) for birthdate in sorted_birthdates]
-        # print(start_offsets)
 
-    
+    start_offset = unpack('I', start_offsets[0])[0]
     with open('cluster_index_file.bin', 'rb') as cluster_index_file:
         with open(file_name, 'rb') as f:
-            for offset in start_offsets:
-                start_offset = unpack('I', offset)[0]
-                cluster_index_file.seek(start_offset)
+
+            # Check preceding block to get all records
+            cluster_index_file.seek(start_offset - 4096)
+            done = False
+            while True:
                 cluster_data = cluster_index_file.read(4096)
 
                 start = 0
@@ -259,6 +259,9 @@ def table_scan_on_cluster_index(file_name, verbose):
                     entry = cluster_data[start:start+16]
 
                     if not entry:
+                        print(count)
+                        done = True
+                        print('break1')
                         break
 
                     day, month, year, record_pointer = unpack(
@@ -266,7 +269,10 @@ def table_scan_on_cluster_index(file_name, verbose):
                     age = calculate_age(day, month, year)
 
                     if age >= 21:
-                        continue
+                        print(count)
+                        done = True
+                        print('break2')
+                        break
 
                     f.seek(record_pointer)
                     data = f.read(405)
@@ -279,10 +285,13 @@ def table_scan_on_cluster_index(file_name, verbose):
 
                     if verbose:
                         print(Person(fname, lname, ssn, age))
+                        print(count)
+                        print(record_pointer)
 
                     start += 16
                     record_pointer += 16
-
+                if done:
+                    break
     print("Number of records: {}".format(count))
 
 
@@ -291,8 +300,19 @@ def main(ARGS):
         create_primary_index(ARGS.file)
     if ARGS.secondary:
         generate_secondary_index_file(ARGS.file)
+        try:
+            f = open('secondary_index_file.bin')
+            f.close()
+        except FileNotFoundError:
+            print('Cannot generate secondary index file')
         create_secondary_index('secondary_index_file.bin')
     if ARGS.cluster:
+        try:
+            f = open('secondary_index_file.bin')
+            f.close()
+        except FileNotFoundError:
+            print('Run -s or --secondary before executing this command')
+            exit(0)
         generate_cluster_index_file('secondary_index_file.bin')
         create_cluster_index('cluster_index_file.bin')
     if ARGS.query1:
