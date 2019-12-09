@@ -1,5 +1,10 @@
 #!/usr/bin/env sh
-
+#title           :project3.sh
+#description     :This script will generates the result log and time log
+#author		       :Thomas Ngo
+#date            :12/09/2019
+#notes           :Run chmod 777 *.sh to give the execute privilege for current user
+#==================================================================================
 if [ $# -lt 2 ]; then
   printf "missing file or command\\n"
   exit 0
