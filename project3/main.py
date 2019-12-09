@@ -18,8 +18,6 @@ def create_primary_index(data_file):
             db[pack('I', i)] = pack('I', offset)
             offset += 4096
 
-# query 1
-
 
 def table_scan(data_file, verbose):
     count = 0
@@ -192,13 +190,15 @@ def generate_cluster_index_file(secondary_index_file):
                 record_pointer_in_bytes = pack('I', record_pointer)
                 entries.append((datetime.strptime(birthdate, '%d-%m-%Y').date(),
                                 birthdate_in_bytes, record_pointer_in_bytes))
-
                 start += 16
                 record_pointer += 16
+
     entries.sort(key=lambda x: x[0], reverse=True)
-    with open('cluster_index_file.bin', 'wb') as secondary_index_file:
-        for entry in entries:
-            secondary_index_file.write(entry[1]+entry[2])
+    if f.closed:
+        with open('cluster_index_file.bin', 'wb') as secondary_index_file:
+            for entry in entries:
+                secondary_index_file.write(entry[1]+entry[2])
+    print('break')
 
 
 def create_cluster_index(cluster_file_name):
@@ -222,21 +222,36 @@ def table_scan_on_cluster_index(file_name, verbose):
     count = 0
     Person = namedtuple(
         'Person', 'fname, lname, ssn, age')
-    start_offset = 0
+    birthdates = []
+    start_offsets = []
     with dbm.ndbm.open('cluster_index', 'r') as cluster_index:
-        for birthdate in cluster_index.keys():
-            day, month, year = unpack('3I', birthdate)
+        for birthdate_in_bytes in cluster_index.keys():
+            day, month, year = unpack('3I', birthdate_in_bytes)
             age = calculate_age(day, month, year)
             if age < 21:
-                start_offset_in_bytes = cluster_index[birthdate]
+                birthdates.append(birthdate_in_bytes)
 
-    start_offset = unpack('I', start_offset_in_bytes)[0]
+        sorted_birthdates = []
+        for birthdate_in_bytes in birthdates:
+            day, month, year = unpack(
+                '3I', birthdate_in_bytes)
+            birthdate = '{}-{}-{}'.format(day, month, year)
+            birthdate_in_bytes = pack('3I', day, month, year)
+            sorted_birthdates.append((datetime.strptime(birthdate, '%d-%m-%Y').date(),
+                                    birthdate_in_bytes))
 
+        sorted_birthdates.sort(key=lambda x: x[0], reverse=True)
+
+        start_offsets = [cluster_index[birthdate[1]] for birthdate in sorted_birthdates]
+        # start_offsets = [unpack('I', cluster_index[birthdate[1]]) for birthdate in sorted_birthdates]
+        # print(start_offsets)
+
+    
     with open('cluster_index_file.bin', 'rb') as cluster_index_file:
         with open(file_name, 'rb') as f:
-            cluster_index_file.seek(start_offset)
-            done = False
-            while True:
+            for offset in start_offsets:
+                start_offset = unpack('I', offset)[0]
+                cluster_index_file.seek(start_offset)
                 cluster_data = cluster_index_file.read(4096)
 
                 start = 0
@@ -251,8 +266,7 @@ def table_scan_on_cluster_index(file_name, verbose):
                     age = calculate_age(day, month, year)
 
                     if age >= 21:
-                        done = True
-                        break
+                        continue
 
                     f.seek(record_pointer)
                     data = f.read(405)
@@ -269,8 +283,6 @@ def table_scan_on_cluster_index(file_name, verbose):
                     start += 16
                     record_pointer += 16
 
-                if done:
-                    break
     print("Number of records: {}".format(count))
 
 
@@ -291,16 +303,17 @@ def main(ARGS):
         table_scan_on_secondary_index(ARGS.file, ARGS.verbose)
     if ARGS.query4:
         table_scan_on_cluster_index(ARGS.file, ARGS.verbose)
+    print('done')
 
 
 if __name__ == '__main__':
-    PARSER = argparse.ArgumentParser(
+    PARSER=argparse.ArgumentParser(
         description='Fall 2019 - Advanced Database Project 3')
     PARSER.add_argument('file', help='binary file (small.bin or large.bin)')
     PARSER.add_argument('-v', '--verbose',
                         help='Show output records', action='store_true')
 
-    GROUP = PARSER.add_mutually_exclusive_group()
+    GROUP=PARSER.add_mutually_exclusive_group()
     GROUP.add_argument('-p', '--primary',
                        help='Create auto increment index', action='store_true')
     GROUP.add_argument(
@@ -316,7 +329,7 @@ if __name__ == '__main__':
     GROUP.add_argument('-q4', '--query4',
                        help='Cluster index', action='store_true')
 
-    ARGS = PARSER.parse_args()
+    ARGS=PARSER.parse_args()
     if not any([ARGS.primary, ARGS.secondary, ARGS.query1, ARGS.query2, ARGS.query3,
                 ARGS.verbose, ARGS.cluster, ARGS.query4]):
         PARSER.print_help()
