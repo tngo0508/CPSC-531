@@ -8,7 +8,7 @@ To display helper menu
 To run query:
 ./main.py BINARY_FILE COMMAND [VERBOSE]
 
-For query commands (q1, q2, q3, q4), add -v at the end see verbose output
+For query commands (q1, q2, q3, q4), add -v at the end to see verbose output
 
 EXAMPLE:
 Query 1:

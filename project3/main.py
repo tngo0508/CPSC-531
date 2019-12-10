@@ -221,7 +221,7 @@ def create_secondary_index(secondary_index_file):
     given a secondary index file
 
     In the generated DBM, key is the birthdate and value is a list of 
-    record pointers that points to the record has the same birthdate
+    record pointers that points to the records have the same birthdate
 
     Args:
         secondary_index_file (str): an index file (binary file) that is
