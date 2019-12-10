@@ -38,5 +38,5 @@ EXAMPLE:
 Query 1 verbose output:
 ./run.sh small.bin q1 -v
 
-*************************88HOW TO CLEANUP FILES***************************
+****************************HOW TO CLEANUP FILES***************************
 ./cleanup.sh
