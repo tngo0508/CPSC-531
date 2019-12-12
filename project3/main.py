@@ -234,8 +234,7 @@ def external_sort(data_file):
     i = 1
     j = get_num_blocks(data_file)
     # k = 262144
-    # k = (4294967296//8)//4096
-    k = (40960 // 2) // 4096
+    k = 131072
     m = math.ceil(j / k)
     sorting_file_num = 1
 
@@ -245,6 +244,10 @@ def external_sort(data_file):
             lst = []
             for _ in range(k):
                 data = f.read(4096)
+
+                if not data:
+                    break
+
                 start = 0
                 for _ in range(10):
                     # fname, lname, job, comp, addr, phone, day, month, year, ssn, uname, email, url = unpack(
@@ -257,6 +260,7 @@ def external_sort(data_file):
                      datetime.strptime(str(x[6]) + '-' + str(x[7]) + '-' + str(x[8]),
                                        '%d-%m-%Y'),
                      reverse=True)
+
             file_name = 'file' + str(sorting_file_num)
             with open(file_name, 'wb') as file:
                 count = 0
@@ -278,6 +282,10 @@ def external_sort(data_file):
     i = 1
     p = math.ceil(math.log(m, k - 1))
     j = m
+
+    if i > p:
+        os.rename('file1', 'sorted_' + str(data_file))
+
     while i <= p:
         n = 1
         q = math.ceil(j/(k-1))
@@ -292,7 +300,6 @@ def external_sort(data_file):
                     with open(file_name, 'rb') as f:
                         f.seek(f_ptr)
                         data = f.read(4096)
-                        # f_ptr += 4096
                         start = 0
                         for _ in range(10):
                             lst.append(
@@ -301,9 +308,9 @@ def external_sort(data_file):
                 f_ptr += 4096
 
                 lst.sort(key=lambda x:
-                        datetime.strptime(str(x[6]) + '-' + str(x[7]) + '-' + str(x[8]),
-                                        '%d-%m-%Y'),
-                        reverse=True)
+                         datetime.strptime(str(x[6]) + '-' + str(x[7]) + '-' + str(x[8]),
+                                           '%d-%m-%Y'),
+                         reverse=True)
 
                 output_file = 'sorted_' + data_file
                 with open(output_file, 'ab') as file:
@@ -318,9 +325,84 @@ def external_sort(data_file):
                         if count == 10:
                             file.write(pack('x')*46)
                             count = 0
-            n += 1        
+            n += 1
         j = q
         i += 1
+
+
+def create_cluster_index(sorted_data_file):
+    num_blocks = get_num_blocks(sorted_data_file)
+    with dbm.ndbm.open('cluster_index', 'n') as cluster_index:
+        with open(sorted_data_file, 'rb') as f:
+            for _ in range(num_blocks):
+                record_pointer = f.tell()
+                data = f.read(4096)
+
+                start = 0
+                for _ in range(10):
+                    _, _, _, _, _, _, day, month, year, _, _, _, _ = unpack(
+                        '20s20s70s40s80s25s3I12s25s50s50s', data[start:start+405])
+
+                    birthdate = pack('3I', day, month, year)
+
+                    if str(birthdate) not in cluster_index:
+                        cluster_index[birthdate] = pack('I', record_pointer)
+                    start += 405
+                    record_pointer += 405
+
+
+def table_scan_on_cluster_index(sorted_data_file, verbose):
+    Person = namedtuple(
+        'Person', 'fname, lname, ssn, age')
+    count = 0
+    birthdates = []
+    start_offset = 0
+    with dbm.ndbm.open('cluster_index', 'r') as cluster_index:
+        for birthdate_in_bytes in cluster_index.keys():
+            day, month, year = unpack('3I', birthdate_in_bytes)
+            age = calculate_age(day, month, year)
+            if age < 21:
+                birthdates.append(birthdate_in_bytes)
+
+        sorted_birthdates = []
+        for birthdate_in_bytes in birthdates:
+            day, month, year = unpack(
+                '3I', birthdate_in_bytes
+            )
+            birthdate = '{}-{}-{}'.format(day, month, year)
+            birthdate_in_bytes = pack('3I', day, month, year)
+            sorted_birthdates.append((datetime.strptime(birthdate, '%d-%m-%Y').date(),
+                                        birthdate_in_bytes))
+
+        sorted_birthdates.sort(key=lambda x: x[0], reverse=True)
+        start_offset = unpack('I', cluster_index[sorted_birthdates[0][1]])[0]
+
+    with open(sorted_data_file, 'rb') as f:
+        f.seek(start_offset)
+        while True:
+            data = f.peek(46)
+
+            if data == pack('x')*46:
+                f.read(46)
+                continue
+
+            data = f.read(405)
+
+            fname, lname, _, _, _, _, day, month, year, ssn, _, _, _ = unpack(
+                '20s20s70s40s80s25s3I12s25s50s50s', data)
+            fname = fname.replace(b'\x00', b'')
+            lname = lname.replace(b'\x00', b'')
+            ssn = ssn.replace(b'\x00', b'')
+            age = calculate_age(day, month, year)
+
+            if age >= 21:
+                break
+            
+            count += 1
+            if verbose:
+                print(Person(fname, lname, ssn, age))
+
+    print("Number of records: {}".format(count))
 
 
 def test(data_file):
@@ -359,8 +441,10 @@ def main(ARGS):
         create_secondary_index(ARGS.file)
 
     if ARGS.cluster:
-        external_sort(ARGS.file)
-        test('sorted_small.bin')
+        # external_sort(ARGS.file)
+        # create_cluster_index('sorted_large.bin')
+        create_cluster_index('sorted_small.bin')
+        # test('sorted_large.bin')
         # test('file1')
         # print('------------')
         # test('file2')
@@ -374,8 +458,8 @@ def main(ARGS):
     if ARGS.query3:
         table_scan_on_secondary_index(ARGS.file, ARGS.verbose)
 
-    # if ARGS.query4:
-    #     table_scan_on_cluster_index(ARGS.file, ARGS.verbose)
+    if ARGS.query4:
+        table_scan_on_cluster_index('sorted_small.bin', ARGS.verbose)
 
     print('Done!')
     exit(1)
