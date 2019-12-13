@@ -13,24 +13,13 @@ import dbm.ndbm
 import os
 import argparse
 import math
-import tempfile
+import collections
 
 __author__ = "Thomas Ngo, Danh Pham, Su Htet"
-__copyright__ = "Copyright 2019, CPSC 531 - Fall 2019 - Project 3"
-__credits__ = "[Thomas Ngo, Danh Pham, Su Htet, Kenytt Avery]"
 __email__ = "tngo0508@csu.fullerton.edu"
 
 
 def get_num_blocks(data_file):
-    """Function calculates the total number of disk blocks.
-
-    Arg:
-        data_file (str): file is required to calculate
-
-    Returns:
-        int: the number of block if it is larger than 0. Otherwise, return 1
-
-    """
     try:
         f = open(data_file)
         f.close()
@@ -43,86 +32,32 @@ def get_num_blocks(data_file):
     return 1 if num_blocks == 0 else num_blocks
 
 
-def create_primary_index(data_file):
-    """Function creates primary index for query 1 and 2.
-
-    Given a binary file, this function generates an index file
-
-    Arg:
-        data_file (str): Original data files. Either large.bin or small.bin
-
-    """
-    num_blocks = get_num_blocks(data_file)
-    with dbm.ndbm.open('index', 'n') as db:
-        offset = 0
-
-        # use auto-increment for primary index start from 1
-        for i in range(1, num_blocks + 1):
-            db[pack('I', i)] = pack('I', offset)
-            offset += 4096
-
-
 def table_scan(data_file, verbose):
-    """Function performs query 1 - Table scan
-
-    Given a DBM files, this function does the table scan.
-    Read the file block-by-block, list the SSN, first name, and last name
-    of all users  under age 21. 
-
-    Args:
-        data_file (str): Original data files. Either large.bin or small.bin
-        verbose (str): command to explicitly print out the result tuples
-
-    """
-    count = 0
+    num_blocks = get_num_blocks(data_file)
     Person = namedtuple(
         'Person', 'fname, lname, ssn, age')
-    try:
-        with dbm.ndbm.open('index', 'r') as db:
-            with open(data_file, 'rb') as f:
-                for record in db.keys():
-                    offset = unpack('I', db[record])[0]
-                    f.seek(offset)
-                    data = f.read(4096)
-
-                    start = 0
-
-                    # The block factor (bfr) = 10. 1 block contains 10 records
-                    for _ in range(10):
-
-                        # the record length R = 404 bytes.
-                        # 405 is used due to offset in Python when slicing
-                        fname, lname, _, _, _, _, day, month, year, ssn, _, _, _ = unpack(
-                            '20s20s70s40s80s25s3I12s25s50s50s', data[start:start+405])
-
-                        age = calculate_age(day, month, year)
-                        if age < 21:
-                            fname = fname.replace(b'\x00', b'')
-                            lname = lname.replace(b'\x00', b'')
-                            ssn = ssn.replace(b'\x00', b'')
-                            if verbose:
-                                print(Person(fname, lname, ssn, age))
-                            count += 1
-                        start += 405
-    except dbm.error:
-        print('You have not created primary index yet')
-        print('Run -p or --primary before executing this command')
-        exit(0)
+    count = 0
+    with open(data_file, 'rb') as f:
+        for _ in range(num_blocks):
+            data = f.read(4096)
+            start = 0
+            for _ in range(10):
+                fname, lname, job, comp, addr, phone, day, month, year, ssn, uname, email, url = unpack(
+                    '20s20s70s40s80s25s3I12s25s50s50s', data[start:start+405])
+                fname = fname.replace(b'\x00', b'')
+                lname = lname.replace(b'\x00', b'')
+                ssn = ssn.replace(b'\x00', b'')
+                age = calculate_age(day, month, year)
+                start += 405
+                if age < 21:
+                    if verbose:
+                        # print(Person(fname, lname, ssn, age))
+                        print(age)
+                    count += 1
     print("Number of records: {}".format(count))
 
 
 def calculate_age(day, month, year):
-    """Function calculate user's age
-
-    Args:
-        day (int): day in DOB
-        month (int): month in DOB
-        year (int): year in DOB
-
-    Returns:
-        int: age of a user
-
-    """
     # see details at
     # https://stackoverflow.com/questions/2217488/age-from-birthdate-in-python
     today = date.today()
@@ -130,49 +65,28 @@ def calculate_age(day, month, year):
 
 
 def uniqueness_check(data_file, verbose):
-    """Function performs query 2 - Uniqueness check
-
-    The SSN is supposed to be a unique identifier, but it was not UNIQUE in the
-    given data files. Read the file block-by-block, using a DBM database to check
-    whether the SSN has been seen before.
-
-    Args:
-        data_file (str): Original data files. Either large.bin or small.bin
-        verbose (str): command to explicitly print out the result tuples
-
-    """
     count = 0
     seen = set()
-    try:
-        with dbm.ndbm.open('index', 'r') as db:
-            with open(data_file, 'rb') as f:
-                for record in db.keys():
-                    offset = unpack('I', db[record])[0]
-                    f.seek(offset)
-                    data = f.read(4096)
+    num_blocks = get_num_blocks(data_file)
+    with open(data_file, 'rb') as f:
+        for _ in range(num_blocks):
+            data = f.read(4096)
 
-                    start = 0
+            start = 0
 
-                    # The block factor (bfr) = 10. 1 block contains 10 records
-                    for _ in range(10):
+            for _ in range(10):
 
-                        # the record length R = 404 bytes.
-                        # 405 is used due to offset in Python when slicing
-                        _, _, _, _, _, _, _, _, _, ssn, _, _, _ = unpack(
-                            '20s20s70s40s80s25sIII12s25s50s50s', data[start:start+405])
+                _, _, _, _, _, _, _, _, _, ssn, _, _, _ = unpack(
+                    '20s20s70s40s80s25sIII12s25s50s50s', data[start:start+405])
 
-                        ssn = ssn.replace(b'\x00', b'')
-                        if ssn not in seen:
-                            seen.add(ssn)
-                        else:
-                            count += 1
-                            if verbose:
-                                print(ssn)
-                        start += 405
-    except dbm.error:
-        print('You have not created primary index yet')
-        print('Run -p or --primary before executing this command')
-        exit(0)
+                ssn = ssn.replace(b'\x00', b'')
+                if ssn not in seen:
+                    seen.add(ssn)
+                else:
+                    count += 1
+                    if verbose:
+                        print(ssn)
+                start += 405
     print("Number of records: {}".format(count))
 
 
@@ -233,7 +147,6 @@ def table_scan_on_secondary_index(data_file, verbose):
 def external_sort(data_file):
     i = 1
     j = get_num_blocks(data_file)
-    # k = 262144
     k = 131072
     m = math.ceil(j / k)
     sorting_file_num = 1
@@ -250,8 +163,6 @@ def external_sort(data_file):
 
                 start = 0
                 for _ in range(10):
-                    # fname, lname, job, comp, addr, phone, day, month, year, ssn, uname, email, url = unpack(
-                    #     '20s20s70s40s80s25s3I12s25s50s50s', data[start:start+405])
                     lst.append(
                         unpack('20s20s70s40s80s25s3I12s25s50s50s', data[start:start+405]))
                     start += 405
@@ -279,56 +190,81 @@ def external_sort(data_file):
             i += 1
 
     # merging phase
-    i = 1
-    p = math.ceil(math.log(m, k - 1))
-    j = m
+    if data_file == 'small.bin':
+        os.rename('file1', 'sorted_small.bin')
+    elif data_file == 'large.bin':
+        queue = collections.deque()
+        for i in range(1, m + 1):
+            queue.append(i)
+        merge_num = 1
+        while len(queue) > 1:
+            file_1 = 'file' + str(queue.popleft())
+            file_2 = 'file' + str(queue.popleft())
+            queue.append(merge_num)
+            merge_file = 'merge' + str(merge_num)
+            
+            with open(file_1, 'rb') as file1:
+                with open(file_2, 'rb') as file2:
+                    with open(merge_file, 'ab') as merge1:
+                        merge_lst = []
+                        data1 = file1.read(405)
+                        data2 = file2.read(405)
+                        file1_cnt = 1
+                        file2_cnt = 1
+                        while data1 and data2:
+                            _, _, _, _, _, _, day, month, year, _, _, _, _ = unpack(
+                                '20s20s70s40s80s25s3I12s25s50s50s', data1)
+                            x = datetime(year, month, day)
+                            _, _, _, _, _, _, day, month, year, _, _, _, _ = unpack(
+                                '20s20s70s40s80s25s3I12s25s50s50s', data2)
+                            y = datetime(year, month, day)
+                            if x <= y:
+                                merge_lst.append(data1)
+                                data1 = file1.read(405)
+                                file1_cnt += 1
+                            else:
+                                merge_lst.append(data2)
+                                data2 = file2.read(405)
+                                file2_cnt += 1
+                            
+                            if file1_cnt == 10:
+                                file1.read(46)
+                                file1_cnt = 0
+                            if file2_cnt == 10:
+                                file2.read(46)
+                                file2_cnt = 0
 
-    if i > p:
-        os.rename('file1', 'sorted_' + str(data_file))
-
-    while i <= p:
-        n = 1
-        q = math.ceil(j/(k-1))
-
-        while n <= q:
-            num_blocks = get_num_blocks('file1')
-            f_ptr = 0
-            for _ in range(num_blocks):
-                lst = []
-                for file_num in range(1, m+1):
-                    file_name = 'file' + str(file_num)
-                    with open(file_name, 'rb') as f:
-                        f.seek(f_ptr)
-                        data = f.read(4096)
-                        start = 0
-                        for _ in range(10):
-                            lst.append(
-                                unpack('20s20s70s40s80s25s3I12s25s50s50s', data[start:start+405]))
-                            start += 405
-                f_ptr += 4096
-
-                lst.sort(key=lambda x:
-                         datetime.strptime(str(x[6]) + '-' + str(x[7]) + '-' + str(x[8]),
-                                           '%d-%m-%Y'),
-                         reverse=True)
-
-                output_file = 'sorted_' + data_file
-                with open(output_file, 'ab') as file:
-                    count = 0
-                    for x in lst:
-                        fname, lname, job, comp, addr, phone, day, month, year, ssn, uname, email, url = x
-                        file.write(pack('20s20s70s40s80s25s3I12s25s50s50s',
-                                        fname, lname, job, comp, addr, phone, day, month, year, ssn, uname, email, url))
-
-                        count += 1
-
-                        if count == 10:
-                            file.write(pack('x')*46)
-                            count = 0
-            n += 1
-        j = q
-        i += 1
-
+                            if len(merge_lst) == 10:
+                                for x in merge_lst:
+                                    merge1.write(x)
+                                merge1.write(pack('x')*46)
+                                merge_lst = []
+                        if data1:
+                            merge1.write(data1)
+                            while data1:
+                                if file1_cnt == 10:
+                                    data1 = file1.read(46)
+                                    file1_cnt = 0
+                                else:
+                                    data1 = file1.read(405)
+                                    file1_cnt += 1
+                                merge1.write(data1)
+                        
+                        if data2:
+                            merge1.write(data2)
+                            while data2:
+                                if file2_cnt == 10:
+                                    data2 = file2.read(46)
+                                    file2_cnt = 0
+                                else:
+                                    data2 = file2.read(405)
+                                    file2_cnt += 1
+                                merge1.write(data2)
+            os.remove(file_1)
+            os.remove(file_2)
+            os.rename(merge_file, 'file'+str(merge_num))
+            merge_num += 1
+        os.rename('file' + str(merge_num - 1), 'sorted_' + data_file)
 
 def create_cluster_index(sorted_data_file):
     num_blocks = get_num_blocks(sorted_data_file)
@@ -388,66 +324,37 @@ def table_scan_on_cluster_index(sorted_data_file, verbose):
 
             data = f.read(405)
 
+            if not data:
+                break
+
             fname, lname, _, _, _, _, day, month, year, ssn, _, _, _ = unpack(
                 '20s20s70s40s80s25s3I12s25s50s50s', data)
             fname = fname.replace(b'\x00', b'')
             lname = lname.replace(b'\x00', b'')
             ssn = ssn.replace(b'\x00', b'')
             age = calculate_age(day, month, year)
-
-            if age >= 21:
-                break
             
-            count += 1
-            if verbose:
-                print(Person(fname, lname, ssn, age))
+            if age < 21:
+                count += 1
+                if verbose:
+                    print(Person(fname, lname, ssn, age))
 
     print("Number of records: {}".format(count))
 
 
-def test(data_file):
-    num_blocks = get_num_blocks(data_file)
-    Person = namedtuple(
-        'Person', 'fname, lname, ssn, year')
-    count = 0
-    with open(data_file, 'rb') as f:
-        for _ in range(num_blocks):
-            data = f.read(4096)
-            start = 0
-            for _ in range(10):
-                fname, lname, job, comp, addr, phone, day, month, year, ssn, uname, email, url = unpack(
-                    '20s20s70s40s80s25s3I12s25s50s50s', data[start:start+405])
-                fname = fname.replace(b'\x00', b'')
-                lname = lname.replace(b'\x00', b'')
-                ssn = ssn.replace(b'\x00', b'')
-                # age = calculate_age(day, month, year)
-                print(Person(fname, lname, ssn, year))
-                start += 405
-                count += 1
-    print(count)
-
-
 def main(ARGS):
-    """Driver function
-
-    Args:
-        ARGS (parser object): command line to execute the program
-
-    """
-    if ARGS.primary:
-        create_primary_index(ARGS.file)
-
     if ARGS.secondary:
         create_secondary_index(ARGS.file)
 
     if ARGS.cluster:
-        # external_sort(ARGS.file)
-        # create_cluster_index('sorted_large.bin')
-        create_cluster_index('sorted_small.bin')
-        # test('sorted_large.bin')
-        # test('file1')
-        # print('------------')
-        # test('file2')
+        external_sort(ARGS.file)
+        sorted_file = 'sorted_' + ARGS.file
+        try:
+            f = open(sorted_file)
+            f.close()
+        except FileNotFoundError:
+            print('Cannot find sorted data file')
+        create_cluster_index(sorted_file)
 
     if ARGS.query1:
         table_scan(ARGS.file, ARGS.verbose)
@@ -459,7 +366,13 @@ def main(ARGS):
         table_scan_on_secondary_index(ARGS.file, ARGS.verbose)
 
     if ARGS.query4:
-        table_scan_on_cluster_index('sorted_small.bin', ARGS.verbose)
+        sorted_file = 'sorted_' + ARGS.file
+        try:
+            f = open(sorted_file)
+            f.close()
+        except FileNotFoundError:
+            print('Cannot find sorted data file')
+        table_scan_on_cluster_index(sorted_file, ARGS.verbose)
 
     print('Done!')
     exit(1)
@@ -473,8 +386,6 @@ if __name__ == '__main__':
                         help='Show output records', action='store_true')
 
     GROUP = PARSER.add_mutually_exclusive_group()
-    GROUP.add_argument('-p', '--primary',
-                       help='Create auto increment index', action='store_true')
     GROUP.add_argument(
         '-s', '--secondary', help='Create secondary index on birthdate', action='store_true')
     GROUP.add_argument(
@@ -489,7 +400,7 @@ if __name__ == '__main__':
                        help='Cluster index', action='store_true')
 
     ARGS = PARSER.parse_args()
-    if not any([ARGS.primary, ARGS.secondary, ARGS.query1, ARGS.query2, ARGS.query3,
+    if not any([ARGS.secondary, ARGS.query1, ARGS.query2, ARGS.query3,
                 ARGS.verbose, ARGS.cluster, ARGS.query4]):
         PARSER.print_help()
         print('\nOne of the options is required')

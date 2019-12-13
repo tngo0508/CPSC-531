@@ -11,4 +11,8 @@ rm -f *.db
 rm -f cluster_index_file.bin
 rm -f secondary_index_file.bin
 rm -f file*
-# rm -f sorted_small.bin
+rm -f sorted_small.bin
+# rm -f sorted_large.bin
+rm -f merge*
+
+# cp -R save/file* .
