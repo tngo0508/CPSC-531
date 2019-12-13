@@ -51,8 +51,7 @@ def table_scan(data_file, verbose):
                 start += 405
                 if age < 21:
                     if verbose:
-                        # print(Person(fname, lname, ssn, age))
-                        print(age)
+                        print(Person(fname, lname, ssn, age))
                     count += 1
     print("Number of records: {}".format(count))
 
